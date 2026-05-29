@@ -8,6 +8,7 @@ const int gPhenixMarker = 20;
 void pA(const int savePlot);
 void BES(const int savePlot);
 void RaaVsPt(const int savePlot);
+void RaaVsNpart(const int savePlot);
 
 //================================================
 void plot_Jpsi()
@@ -16,7 +17,118 @@ void plot_Jpsi()
 
   //pA(1);
   //BES(1);
-  //RaaVsPt(0);
+  RaaVsPt(1);
+  //RaaVsNpart(0);
+}
+
+//================================================
+void RaaVsNpart(const int savePlot)
+{
+  TFile *fin = TFile::Open("inputs/Jpsi_AA.root", "read");
+  TGraphAsymmErrors *gStarJpsiRAA = (TGraphAsymmErrors*)fin->Get("STAR_Run14MTD_JpsiRaaVsNpart_pt0GeV");
+  TGraphAsymmErrors *gStarJpsiRAASys = (TGraphAsymmErrors*)fin->Get("STAR_Run14MTD_JpsiRaaVsNpart_pt0GeV_sys");
+  TBox *globalSys_Star = (TBox*)fin->Get("STAR_Run14MTD_JpsiRaaVsNpart_pt0GeV_globalsys");
+  TGraphAsymmErrors *gStarNcollSys = (TGraphAsymmErrors*)fin->Get("STAR_Run14MTD_Npart_err_pt0GeV");
+
+  // add ncoll uncertainty to total uncertainty
+  int npoint = gStarJpsiRAASys->GetN();
+  TGraphAsymmErrors *gStarJpsiRAASysTotal = new TGraphAsymmErrors(npoint);
+  for(int i=0; i<npoint; i++)
+    {
+      double sysl1 = gStarJpsiRAASys->GetErrorYlow(i);
+      double sysl2 = gStarNcollSys->GetErrorYlow(i)*gStarJpsiRAASys->GetY()[i];
+      double sysl = sqrt(sysl1*sysl1+sysl2*sysl2);
+
+      double sysh1 = gStarJpsiRAASys->GetErrorYhigh(i);
+      double sysh2 = gStarNcollSys->GetErrorYhigh(i)*gStarJpsiRAASys->GetY()[i];
+      double sysh = sqrt(sysh1*sysh1+sysh2*sysh2);
+
+      cout << sysl << "  " << sysl1 << "  " << gStarJpsiRAASys->GetErrorYlow(i) << endl;
+
+      gStarJpsiRAASysTotal->SetPointError(i, gStarJpsiRAASys->GetErrorXlow(i), gStarJpsiRAASys->GetErrorXhigh(i), sysl, sysh);
+      gStarJpsiRAASysTotal->SetPoint(i, gStarJpsiRAASys->GetX()[i], gStarJpsiRAASys->GetY()[i]);
+      //gStarJpsiRAASysTotal->SetPointEYlow(i, sysl);
+      //gStarJpsiRAASys->SetPointEYhigh(i, sysh);
+    }
+
+  gStarJpsiRAA->SetMarkerStyle(gStarMarker);
+  gStarJpsiRAA->SetMarkerSize(2.5);
+  gStarJpsiRAA->SetMarkerColor(gStarColor);
+  gStarJpsiRAA->SetLineColor(gStarColor);
+  gStarJpsiRAASysTotal->SetMarkerSize(0);
+  gStarJpsiRAASysTotal->SetFillStyle(0);
+  gStarJpsiRAASysTotal->SetFillColor(kRed-5);
+  gStarJpsiRAASysTotal->SetLineColor(gStarColor);
+  cout << globalSys_Star->GetY2() << endl;
+
+  // Get PHENIX data points: Phys.Rev.C 84 (2011) 054912
+  char aa[256];
+  ifstream ifs;
+  TString tempstr;
+  ifs.open("inputs/HEPData-PHENIX-forwardJpsi.dat");
+  const int npoints = 17;
+  
+  TGraphErrors *grPhenixJpsiRAA = new TGraphErrors(npoints);
+  grPhenixJpsiRAA->SetName("PHENIX_JpsiRaaVsNpart_forward");
+  TGraphErrors *grPhenixJpsiRAASys =  new TGraphErrors(npoints);
+  grPhenixJpsiRAASys->SetName("PHENIX_JpsiRaaVsNpart_forward_sys");
+  for(int i=0; i<npoints; i++)
+    {
+      ifs >> tempstr;
+      TObjArray *tokens = tempstr.Tokenize(",");
+      double a[6];
+      for (int j = 0; j < 6; ++j)
+	{
+	  a[j] = ((TObjString*)tokens->At(j))->GetString().Atof();
+	}
+      delete tokens;
+      
+      grPhenixJpsiRAA->SetPoint(i, a[0], a[1]);
+      grPhenixJpsiRAA->SetPointError(i, 0, a[2]);
+      grPhenixJpsiRAASys->SetPoint(i, a[0], a[1]);
+      grPhenixJpsiRAASys->SetPointError(i, 5, a[4]);
+    }
+  grPhenixJpsiRAA->SetMarkerStyle(gPhenixMarker);
+  grPhenixJpsiRAA->SetMarkerSize(2);
+  grPhenixJpsiRAA->SetMarkerColor(gPhenixColor);
+  grPhenixJpsiRAA->SetLineColor(gPhenixColor);
+  grPhenixJpsiRAASys->SetMarkerSize(0);
+  grPhenixJpsiRAASys->SetFillStyle(1001);
+  grPhenixJpsiRAASys->SetFillColor(kBlue-10);
+  grPhenixJpsiRAASys->SetLineColor(kBlue-10);
+
+  TCanvas *c = new TCanvas("RAA_vs_npart", "RAA_vs_npart", 800, 600);
+  TH1F *hplot = new TH1F("hplot",";N_{part};R_{AA}", 1100, 0, 400);
+  hplot->GetYaxis()->SetRangeUser(0, 1.6);
+  hplot->GetYaxis()->CenterTitle(false);
+  hplot->GetYaxis()->SetTitleSize(0.05);
+  hplot->Draw();
+  TLine *line = new TLine(0, 1, 400, 1);
+  line->SetLineStyle(2);
+  line->Draw();
+  
+  TLatex tex(0.5,0.5," ");
+  tex.SetNDC();
+  tex.DrawLatex(0.4,0.9,Form("Au+Au #sqrt{s_{NN}} = 200 GeV"));
+
+  TLegend *leg = new TLegend(0.39,0.7,0.8,0.88);
+  leg->SetHeader("Inclusive J/#psi");
+  leg->AddEntry(gStarJpsiRAA, "STAR, |y| < 0.5", "P");
+  leg->AddEntry(grPhenixJpsiRAA, "PHENIX, 1.2 < |y| < 2.2", "P");
+  leg->Draw();
+  
+  grPhenixJpsiRAASys->Draw("samesE5");
+  grPhenixJpsiRAA->Draw("samesPEZ");
+  //globalSys_Phenix->Draw("fsames");
+
+  gStarJpsiRAASysTotal->Draw("samesE5");
+  gStarJpsiRAA->Draw("samesPEZ");
+  //globalSys_Star->Draw("fsames");
+
+  if(savePlot)
+    {
+      c->SaveAs("figs/RHIC_Jpsi_RAAvsNpart.pdf");
+    }
 }
 
 //================================================
@@ -42,19 +154,53 @@ void RaaVsPt(const int savePlot)
   globalSys_Star->SetX1(14.85);
   globalSys_Star->SetX2(15);
 
-  TGraphAsymmErrors *grPhenixJpsiRAA = (TGraphAsymmErrors*)fin->Get("PHENIX_InclJpsiRaaVsPt_020");
-  TGraphAsymmErrors *grPhenixJpsiRAASys = (TGraphAsymmErrors*)fin->Get("PHENIX_InclJpsiRaaVsPt_020_sys");
-  TBox *globalSys_Phenix = new TBox(14.6, 1-0.1, 14.85, 1+0.1);
-  grPhenixJpsiRAA->SetMarkerStyle(gPhenixMarker);
-  grPhenixJpsiRAA->SetMarkerSize(2);
-  grPhenixJpsiRAA->SetMarkerColor(gPhenixColor);
-  grPhenixJpsiRAA->SetLineColor(gPhenixColor);
-  grPhenixJpsiRAASys->SetMarkerSize(0);
-  grPhenixJpsiRAASys->SetFillStyle(1001);
-  grPhenixJpsiRAASys->SetFillColor(kBlue-10);
-  grPhenixJpsiRAASys->SetLineColor(kBlue-10);
-  globalSys_Phenix->SetFillColor(gPhenixColor);
-  globalSys_Phenix->SetLineColor(gPhenixColor);
+  // TGraphAsymmErrors *grPhenixJpsiRAA = (TGraphAsymmErrors*)fin->Get("PHENIX_InclJpsiRaaVsPt_020");
+  // TGraphAsymmErrors *grPhenixJpsiRAASys = (TGraphAsymmErrors*)fin->Get("PHENIX_InclJpsiRaaVsPt_020_sys");
+  // TBox *globalSys_Phenix = new TBox(14.6, 1-0.1, 14.85, 1+0.1);
+  // grPhenixJpsiRAA->SetMarkerStyle(gPhenixMarker);
+  // grPhenixJpsiRAA->SetMarkerSize(2);
+  // grPhenixJpsiRAA->SetMarkerColor(gPhenixColor);
+  // grPhenixJpsiRAA->SetLineColor(gPhenixColor);
+  // grPhenixJpsiRAASys->SetMarkerSize(0);
+  // grPhenixJpsiRAASys->SetFillStyle(1001);
+  // grPhenixJpsiRAASys->SetFillColor(kBlue-10);
+  // grPhenixJpsiRAASys->SetLineColor(kBlue-10);
+  // globalSys_Phenix->SetFillColor(gPhenixColor);
+  // globalSys_Phenix->SetLineColor(gPhenixColor);
+
+  // get forward phenix data
+  // https://www.hepdata.net/record/ins894560
+  TFile *fdata = TFile::Open(Form("inputs/HEPData-PHENIX-forwardJpsi-pt.root"), "read");
+  TH1F *histo = (TH1F*)fdata->Get("Table 5/Hist1D_y1");
+  TH1F *hstat = (TH1F*)fdata->Get("Table 5/Hist1D_y1_e1");
+  TH1F *hsys = (TH1F*)fdata->Get("Table 5/Hist1D_y1_e2");
+  int npoints = histo->GetNbinsX();
+  TGraphAsymmErrors *grPhenixFwdJpsiRAA = new TGraphAsymmErrors(npoints);
+  grPhenixFwdJpsiRAA->SetName("grPhenixFwdJpsiRAA");
+
+  TGraphAsymmErrors *grPhenixFwdJpsiRAASys = new TGraphAsymmErrors(npoints);
+  grPhenixFwdJpsiRAASys->SetName("grPhenixFwdJpsiRAASys");
+  for(int ipoint=0; ipoint<npoints; ipoint++)
+    {
+      int bin = ipoint+1;
+      grPhenixFwdJpsiRAA->SetPoint(ipoint, histo->GetBinCenter(bin), histo->GetBinContent(bin));
+      grPhenixFwdJpsiRAASys->SetPoint(ipoint, histo->GetBinCenter(bin), histo->GetBinContent(bin));
+
+      grPhenixFwdJpsiRAA->SetPointError(ipoint, histo->GetBinWidth(bin)/2, histo->GetBinWidth(bin)/2, hstat->GetBinContent(bin), hstat->GetBinContent(bin));
+      grPhenixFwdJpsiRAASys->SetPointError(ipoint, 0.2, 0.2, hsys->GetBinContent(bin), hsys->GetBinContent(bin));
+    }
+  TBox *globalSys_Phenix_fwd = new TBox(14.6, 1-0.1, 14.85, 1+0.1);
+  grPhenixFwdJpsiRAA->SetMarkerStyle(gPhenixMarker);
+  grPhenixFwdJpsiRAA->SetMarkerSize(2);
+  grPhenixFwdJpsiRAA->SetMarkerColor(gPhenixColor);
+  grPhenixFwdJpsiRAA->SetLineColor(gPhenixColor);
+  grPhenixFwdJpsiRAASys->SetMarkerSize(0);
+  grPhenixFwdJpsiRAASys->SetFillStyle(1001);
+  grPhenixFwdJpsiRAASys->SetFillColor(kBlue-10);
+  grPhenixFwdJpsiRAASys->SetLineColor(kBlue-10);
+  globalSys_Phenix_fwd->SetFillColor(gPhenixColor);
+  globalSys_Phenix_fwd->SetLineColor(gPhenixColor);
+  
 
   TCanvas *c = new TCanvas("RAA_vs_pt", "RAA_vs_pt", 800, 600);
   TH1F *hplot = new TH1F("hplot",";p_{T} (GeV/c);R_{AA}", 1100, 0, 15);
@@ -72,10 +218,10 @@ void RaaVsPt(const int savePlot)
   gModel->SetFillColor(1);
   gModel->SetLineColor(1);
   gModel->SetMarkerColor(1);
-  gModel->Draw("samesE4");
+  //gModel->Draw("samesE4");
   TLegend *leg = new TLegend(0.53,0.77,0.68,0.82);
   leg->AddEntry(gModel, model_name[0], "F");
-  leg->Draw();
+  //leg->Draw();
   
   TLatex tex(0.5,0.5," ");
   tex.SetNDC();
@@ -84,12 +230,12 @@ void RaaVsPt(const int savePlot)
   leg = new TLegend(0.2,0.7,0.5,0.88);
   leg->SetHeader("Inclusive J/#psi");
   leg->AddEntry(gStarJpsiRAA, "STAR, |y| < 0.5", "P");
-  leg->AddEntry(grPhenixJpsiRAA, "PHENIX, |y| < 0.35", "P");
+  leg->AddEntry(grPhenixFwdJpsiRAA, "PHENIX, 1.2 < |y| < 2.2", "P");
   leg->Draw();
   
-  grPhenixJpsiRAASys->Draw("samesE5");
-  grPhenixJpsiRAA->Draw("samesPEZ");
-  globalSys_Phenix->Draw("fsames");
+  grPhenixFwdJpsiRAASys->Draw("samesE5");
+  grPhenixFwdJpsiRAA->Draw("samesPEZ");
+  globalSys_Phenix_fwd->Draw("fsames");
 
   gStarJpsiRAASys->Draw("samesE5");
   gStarJpsiRAA->Draw("samesPEZ");
@@ -99,7 +245,6 @@ void RaaVsPt(const int savePlot)
     {
       c->SaveAs("figs/RHIC_Jpsi_RAAvsPt.pdf");
     }
-  
 }
 
 //================================================
